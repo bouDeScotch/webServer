@@ -1,10 +1,8 @@
-from camera import CAM_INDEX
 from flask import (
     Flask,
     request,
     redirect,
     url_for,
-    render_template_string,
     send_from_directory,
     flash,
     render_template,
@@ -12,7 +10,6 @@ from flask import (
     abort,
     stream_with_context,
 )
-from flask_socketio import SocketIO
 import os
 import random
 import string
@@ -24,10 +21,13 @@ import get_random_file
 import requests
 from urllib.parse import quote
 import queue
-import sounddevice as sd
+import threading
 
 
 CAM_INDEX = 0
+latest_frame = None
+capture_thread = None
+running = True
 
 UPLOAD_FOLDER = "uploads"
 MAX_TOTAL_SIZE = 4 * 1024**3  # 4 Go
@@ -37,11 +37,56 @@ app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.secret_key = "supersecretkey"  # nécessaire pour flash()
 
-socketio = SocketIO(app, cors_allowed_origins="*")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-audio_q = queue.Queue()
+
+def camera_loop():
+    global latest_frame, running
+    cap = None
+
+    print("[INFO] Thread caméra lancé.")
+    while running:
+        if cap is None or not cap.isOpened():
+            try:
+                cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
+                if not cap.isOpened():
+                    print("[ERREUR] Impossible d'ouvrir la caméra.")
+                    time.sleep(3)
+                    continue
+                else:
+                    print("[INFO] Caméra ouverte avec succès.")
+            except Exception as e:
+                print(f"[ERREUR] Ouverture caméra : {e}")
+                time.sleep(3)
+                continue
+
+        ret, frame = cap.read()
+        if ret:
+            latest_frame = frame
+        else:
+            print("[WARN] Perte de flux, tentative de reconnexion...")
+            cap.release()
+            cap = None
+            time.sleep(1)
+        time.sleep(0.05)  # ~20 fps max
+
+    if cap is not None and cap.isOpened():
+        cap.release()
+    print("[INFO] Thread caméra arrêté.")
+
+
+def start_camera_thread():
+    global capture_thread
+    capture_thread = threading.Thread(target=camera_loop, daemon=True)
+    capture_thread.start()
+
+
+def stop_camera_thread():
+    global running
+    running = False
+    if capture_thread is not None:
+        capture_thread.join()
 
 
 def get_folder_size(folder):
@@ -86,9 +131,11 @@ def cat_says(text):
     url = f"https://cataas.com/cat/says/{safe_text}"
 
     try:
-        r = requests.get(url, timeout=8, stream=True)
+        r = requests.get(url, timeout=8)
     except Exception as e:
         abort(502)
+    finally:
+        r.close()
 
     if r.status_code != 200:
         abort(r.status_code)
@@ -108,29 +155,29 @@ def cat_says(text):
 
 @app.route("/cam", methods=["GET"])
 def get_camera():
-    global current_cam_pic_idx
+    global latest_frame, current_cam_pic_idx
 
-    cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_ANY)
-    if not cap.isOpened():
+    if latest_frame is None:
         print("[ERREUR] Impossible d'ouvrir la caméra", file=sys.stderr)
         return render_template("cam_error.html")
-    print("[INFO] Caméra ouverte pour capture unique.")
-    ret, frame = cap.read()
-    cap.release()
-    data = ""
-    data = cv2.imencode(".jpg", frame)[1].tobytes()
-    response = app.response_class(data, mimetype="image/jpeg")
+
+    _, data = cv2.imencode(".jpg", latest_frame)
+    data = data.tobytes()
     # Enregistrer l'image dans un fichier temporaire pour affichage plus simple
     # Delete old picture if exists
-    if os.path.exists(path=os.path.join(app.root_path, "static", current_cam_pic_idx)):
-        os.remove(path=os.path.join(app.root_path, "static", current_cam_pic_idx))
-    # New picture idx
-    current_cam_pic_idx = short_id(4)
-    img_path = os.path.join(
+    old_path = os.path.join(
         app.root_path, "static", current_cam_pic_idx + "_cam_capture.jpg"
     )
-    with open(img_path, "wb") as f:
+    if os.path.exists(old_path):
+        os.remove(old_path)
+    # New picture idx
+    current_cam_pic_idx = short_id(4)
+    new_path = os.path.join(
+        app.root_path, "static", current_cam_pic_idx + "_cam_capture.jpg"
+    )
+    with open(new_path, "wb") as f:
         f.write(data)
+
     return render_template(
         "cam.html",
         img_url=url_for("static", filename=current_cam_pic_idx + "_cam_capture.jpg"),
@@ -261,6 +308,7 @@ if __name__ == "__main__":
     last_file_list_generation = time.time()
     file_list = get_random_file.get_all_files()
     downloadIndexes = {}
+
     print(f"[INFO] {len(file_list)} fichiers indexés.")
     with open(".file_list_cache.txt", "w") as f:
         f.write("\n".join(file_list))
@@ -268,7 +316,11 @@ if __name__ == "__main__":
         f"[INFO] Cache mis à jour. Taille du cache : {os.path.getsize('.file_list_cache.txt')} octets."
     )
 
+    start_camera_thread()
+
     try:
-        app.run(host="0.0.0.0", port=8000, debug=True)
+        app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
     except Exception as e:
         print(f"[ERROR] {e}")
+
+    stop_camera_thread()
