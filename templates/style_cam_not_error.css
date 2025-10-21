@@ -1,0 +1,20 @@
+body {
+	background-color : #2b2b2b;
+	display : flex;
+	height : 100vh;
+	justify-content: center;
+  	align-items: center;
+	overflow : hidden;
+}
+
+img {
+	max-width : 90vw;
+	max-height : 60vh;
+	min-width : 40px;
+	min-height : 20px;
+	border-radius : 10px;
+	box-shadow: rgba(256, 256, 256, 0.8) 0px 0px 30px;
+}
+
+
+

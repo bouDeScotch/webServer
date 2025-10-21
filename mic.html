@@ -1,0 +1,23 @@
+<!-- mic.html -->
+<!DOCTYPE html>
+<html>
+<body>
+<h2>Stream ton micro</h2>
+<script>
+navigator.mediaDevices.getUserMedia({ audio: true })
+.then(stream => {
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) {
+            fetch("/mic", {
+                method: "POST",
+                body: e.data
+            });
+        }
+    };
+    mediaRecorder.start(1000); // envoie chunk toutes les 1s
+});
+</script>
+</body>
+</html>
+

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Micro Stream</title></head>
+<body>
+<h2>Micro en direct</h2>
+<button id="start">Démarrer</button>
+<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+let socket;
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+document.getElementById('start').addEventListener('click', () => {
+    audioCtx.resume().then(() => {
+        socket = io();
+
+        socket.on('audio_chunk', async (arrayBuffer) => {
+            const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start();
+        });
+    });
+});
+</script>
+</body>
+</html>

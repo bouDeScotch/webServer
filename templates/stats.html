@@ -1,0 +1,21 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Statistiques système</title>
+  <style>
+    body { background:#0d0d0d; color:#eee; font-family:monospace; padding:2rem; }
+    h1 { color:rgb(30,130,30); }
+    table { border-collapse:collapse; margin-top:1rem; }
+    td, th { border:1px solid #333; padding:.5rem 1rem; }
+    th { background:#1a1a1a; color:rgb(30,130,30); }
+    tr:nth-child(even) { background:#151515; }
+  </style>
+</head>
+<body>
+  <h1>Infos système</h1>
+  <table>
+    <tr><th>Clé</th><th>Valeur</th></tr>
+    {{ formatted_stats | safe }} 
+  </table>
+</body>
+</html>

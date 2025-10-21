@@ -1,0 +1,5 @@
+__pycache__/
+static/
+uploads/
+venv/
+.file_list_cache
