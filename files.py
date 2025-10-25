@@ -30,8 +30,8 @@ capture_thread = None
 running = True
 
 UPLOAD_FOLDER = "uploads"
-MAX_TOTAL_SIZE = 4 * 1024**3  # 4 Go
-MAX_FILE_SIZE = 4 * 1024**3  # 4 Go
+MAX_TOTAL_SIZE = 8 * 5.6 * 1024**3  # 4 Go
+MAX_FILE_SIZE = 8 * 5.6 * 1024**3  # 4 Go
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -47,6 +47,10 @@ def camera_loop():
 
     print("[INFO] Thread caméra lancé.")
     while running:
+        if not camera_on:
+            cap = None
+            time.sleep(1)
+            continue
         if cap is None or not cap.isOpened():
             try:
                 cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
@@ -153,12 +157,41 @@ def cat_says(text):
     )
 
 
+@app.route("/meow")
+def cat_page():
+    return render_template("cam_error.html")
+
+
+@app.route("/cam_stream_back")
+def cam_stream():
+    def generate():
+        global latest_frame
+        while True:
+            if latest_frame is not None:
+                _, buffer = cv2.imencode(".jpg", latest_frame)
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
+                )
+            time.sleep(0.05)  # ~20 fps
+
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@app.route("/cam_stream")
+def cam_stream_redirect():
+    return render_template("cam_stream.html")
+
+
 @app.route("/cam", methods=["GET"])
 def get_camera():
     global latest_frame, current_cam_pic_idx
 
     if latest_frame is None:
         print("[ERREUR] Impossible d'ouvrir la caméra", file=sys.stderr)
+        return render_template("cam_error.html")
+
+    if not camera_on:
         return render_template("cam_error.html")
 
     _, data = cv2.imencode(".jpg", latest_frame)
@@ -303,7 +336,15 @@ def serve_style_sheet(filepath):
     return send_from_directory(style_dir, filepath)
 
 
+@app.route("/cam/toggle")
+def toggle_camera():
+    global camera_on
+    camera_on = not camera_on
+    return redirect("../cam")
+
+
 if __name__ == "__main__":
+    camera_on = True
     current_cam_pic_idx = short_id(4)
     last_file_list_generation = time.time()
     file_list = get_random_file.get_all_files()

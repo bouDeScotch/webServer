@@ -2,4 +2,6 @@ __pycache__/
 static/
 uploads/
 venv/
+logs/
+.run/
 .file_list_cache.txt
