@@ -332,8 +332,15 @@ def serve_random_file(download_id):
 @app.route("/style/<filepath>", methods=["GET"])
 def serve_style_sheet(filepath):
     print("wahou")
-    style_dir = os.path.join(app.root_path, "templates")
+    style_dir = os.path.join(app.root_path, "templates", "css")
     return send_from_directory(style_dir, filepath)
+
+
+@app.route("/assets/<filepath>", methods=["GET"])
+def serve_asset(filepath):
+    print("asset request:", filepath)
+    asset_dir = os.path.join(app.root_path, "templates", "assets")
+    return send_from_directory(asset_dir, filepath)
 
 
 @app.route("/cam/toggle")
@@ -341,6 +348,11 @@ def toggle_camera():
     global camera_on
     camera_on = not camera_on
     return redirect("../cam")
+
+
+@app.route("/projects")
+def projects_page():
+    return render_template("projects.html")
 
 
 if __name__ == "__main__":
